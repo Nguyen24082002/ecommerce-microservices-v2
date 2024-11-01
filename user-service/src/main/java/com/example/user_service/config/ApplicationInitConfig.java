@@ -38,7 +38,8 @@ public class ApplicationInitConfig {
     @ConditionalOnProperty(
             prefix = "spring",
             value = "datasource.driverClassName",
-            havingValue = "com.mysql.cj.r2dbc.Driver") // R2DBC driver
+            havingValue = "com.mysql.cj.r2dbc.Driver")
+        // R2DBC driver
     CommandLineRunner applicationRunner(UserRepository userRepository, RoleRepository roleRepository) {
         log.info("Initializing application.....");
         return args -> userRepository.findByUsername(ADMIN_USER_NAME)
@@ -64,9 +65,11 @@ public class ApplicationInitConfig {
                                             return userRepository.save(user)
                                                     .doOnSuccess(savedUser -> log.warn("admin user has been created with default password: admin, please change it"));
                                         })
-                                ).subscribe(
-                                        success -> log.info("Application initialization completed ....."),
-                                        error -> log.error("Failed to initialize application: ", error)
-                                );
+                                )
+                )
+                .doOnSuccess(success -> log.info("Application initialization completed ....."))
+                .doOnError(error -> log.error("Failed to initialize application: ", error))
+                .subscribe();
     }
+
 }

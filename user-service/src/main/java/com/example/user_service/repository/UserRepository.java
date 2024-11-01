@@ -12,5 +12,6 @@ import java.util.Optional;
 public interface UserRepository extends R2dbcRepository<User, String> {
     Mono<Boolean> existsByUsername(String username);
 
+
     Mono<User> findByUsername(String username);
 }

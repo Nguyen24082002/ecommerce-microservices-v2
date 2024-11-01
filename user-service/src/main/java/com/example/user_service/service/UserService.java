@@ -1,9 +1,9 @@
 package com.example.user_service.service;
 
-import com.example.user_service.constant.PredefinedRole;
 import com.example.user_service.dto.request.UserCreationRequest;
 import com.example.user_service.dto.response.UserResponse;
 import com.example.user_service.entity.Role;
+import com.example.user_service.entity.RoleName;
 import com.example.user_service.entity.User;
 import com.example.user_service.exception.AppException;
 import com.example.user_service.exception.ErrorCode;
@@ -22,49 +22,51 @@ import reactor.core.publisher.Mono;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
 @RequiredArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @Slf4j
 public class UserService {
     UserRepository userRepository;
-    RoleRepository roleRepository;
     PasswordEncoder passwordEncoder;
+    private final RoleService roleService;
 
-    public Mono<UserResponse> createUser(UserCreationRequest request) {
-        return userRepository.existsByUsername(request.getUsername())
-                .flatMap(exists -> {
-                    if (exists) {
-                        return Mono.error(new AppException(ErrorCode.USER_EXISTED));
-                    }
-                    User user = UserMapper.INSTANCE.toUser(request);
-                    user.setPassword(passwordEncoder.encode(user.getPassword()));
-                    HashSet<Role> roles = new HashSet<>();
+    public Mono<User> register(UserCreationRequest request) {
+        return Mono.defer(() -> {
+            log.info("Registering user {}", request);
+            if (userRepository.existsByUsername(request.getUsername())) {
+                return Mono.error(new AppException(ErrorCode.EMAIL_EXISTED));
+            }
+            if (userRepository.existsByEmail(request.getEmail())) {
+                return Mono.error(new AppException(ErrorCode.EMAIL_EXISTED));
+            }
+            if (userRepository.existsByPhoneNumber(request.getPhone())) {
+                return Mono.error(new AppException(ErrorCode.PHONE_EXISTED));
+            }
 
-                    return roleRepository.findByName(PredefinedRole.USER_ROLE)
-                            .doOnNext(roles::add) // Thêm vai trò vào tập hợp
-                            .then(Mono.just(user))
-                            .doOnNext(u -> u.setRoles(roles))
-                            .flatMap(userRepository::save)
-                            .map(UserMapper.INSTANCE::toUserResponse);
-                });
+            User user = UserMapper.INSTANCE.toUser(request);
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+            user.setRoles(request.getRoles()
+                    .stream()
+                    .map(role -> roleService.findByName(mapToRoleName(role))
+                            .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND)))
+                    .collect(Collectors.toSet())
+            );
+
+            userRepository.save(user);
+            return Mono.just(user);
+        });
     }
 
-    @PreAuthorize("hasRole('ROLE_ADMIN') or #userId == principal.id")
-    public Mono<UserResponse> getUser(String userId) {
-        return userRepository.findById(userId)
-                .switchIfEmpty(Mono.error(new AppException(ErrorCode.USER_NOT_FOUND)))
-                .map(UserMapper.INSTANCE::toUserResponse);
+    private RoleName mapToRoleName(String roleName) {
+        return switch (roleName) {
+            case "ADMIN", "admin", "Admin" -> RoleName.ADMIN;
+            case "USER", "user", "User" -> RoleName.USER;
+            default -> null;
+        };
     }
-
-    @PreAuthorize("hasRole('ROLE_ADMIN')")
-    public Mono<List<UserResponse>> getUsers() {
-        return userRepository.findAll()
-                .map(UserMapper.INSTANCE::toUserResponse)
-                .collectList();
-    }
-
 
 }

@@ -58,7 +58,7 @@ public class GlobalExceptionHandler {
         String enumKey = exception.getFieldError().getDefaultMessage();
 
         ErrorCode errorCode = ErrorCode.INVALID_KEY;
-        Map attributes = null;
+        Map<String, Object> attributes = null;
         try {
             errorCode = ErrorCode.valueOf(enumKey);
 
